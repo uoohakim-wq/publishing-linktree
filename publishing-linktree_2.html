@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>퍼블리싱팀 링크 트리</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-top:#F4F7FC; --bg-bot:#E7ECF5;
+    --surface:#FFFFFF; --ink:#12141C; --muted:#6C7486; --faint:#98A0B1;
+    --line:#E5E9F1; --line-strong:#D2D9E6;
+    --accent:#2E5BFF; --accent-ink:#1E3FCC; --accent-soft:#EDF1FF;
+    --live:#FF4D4D; --ok:#16A34A; --warn:#D97706; --danger:#E23A3A;
+    --radius:16px;
+    --shadow-sm:0 1px 2px rgba(20,25,40,.04), 0 1px 3px rgba(20,25,40,.06);
+    --shadow-lift:0 12px 26px -10px rgba(46,91,255,.28), 0 6px 12px -6px rgba(20,25,40,.10);
+    --shadow-pop:0 24px 60px -18px rgba(20,25,40,.35);
+    --mono:"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans:"Pretendard","Pretendard Variable",-apple-system,BlinkMacSystemFont,system-ui,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:var(--sans); color:var(--ink); min-height:100vh; min-height:100dvh;
+    background:
+      radial-gradient(1100px 560px at 50% -220px, rgba(46,91,255,.11), transparent 68%),
+      linear-gradient(180deg, var(--bg-top), var(--bg-bot));
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  }
+  ::selection{ background:var(--accent-soft); color:var(--accent-ink); }
+  .wrap{ max-width:600px; margin:0 auto; padding:56px 20px 64px; }
+
+  /* ---------- shared-storage warning banner ---------- */
+  .banner{
+    position:sticky; top:0; z-index:40; margin:-56px -20px 24px; padding:11px 18px;
+    background:#FFF7ED; border-bottom:1px solid #FCE4C4; color:#9A5B00;
+    font-size:12.5px; line-height:1.5; text-align:center;
+  }
+  .banner b{ font-weight:700; }
+
+  /* ---------- edit toolbar ---------- */
+  .topbar{
+    display:none; position:sticky; top:14px; z-index:30; margin-bottom:22px;
+    padding:10px 12px; gap:8px; align-items:center; flex-wrap:wrap;
+    background:rgba(255,255,255,.86); backdrop-filter:blur(10px);
+    border:1px solid var(--line-strong); border-radius:14px; box-shadow:var(--shadow-lift);
+  }
+  body[data-mode="edit"] .topbar{ display:flex; }
+  .tb-title{ font-family:var(--mono); font-size:11px; letter-spacing:.14em; color:var(--muted); margin-right:2px; }
+  .tb-spacer{ flex:1; }
+  .synced{ display:inline-flex; align-items:center; gap:6px; font-size:11.5px; color:var(--muted); }
+  .synced .dot{ width:8px; height:8px; border-radius:50%; background:var(--ok); }
+  .synced.off .dot{ background:var(--warn); }
+  .savestate{ font-size:11.5px; color:var(--muted); margin-left:2px; }
+  .savestate.dirty{ color:var(--warn); font-weight:600; }
+
+  /* ---------- buttons ---------- */
+  .btn{
+    font-family:var(--sans); font-size:13px; font-weight:600; line-height:1;
+    padding:9px 13px; border-radius:10px; border:1px solid var(--line-strong);
+    background:var(--surface); color:var(--ink); cursor:pointer;
+    display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
+    transition:transform .12s ease, box-shadow .16s ease, background .16s ease, border-color .16s ease, color .16s ease;
+  }
+  .btn:hover{ border-color:var(--accent); color:var(--accent-ink); }
+  .btn:active{ transform:translateY(1px); }
+  .btn:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+  .btn-primary{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn-primary:hover{ background:var(--accent-ink); border-color:var(--accent-ink); color:#fff; }
+  .btn-primary:disabled{ background:#AEB6CA; border-color:#AEB6CA; cursor:default; }
+  .btn-danger{ color:var(--danger); border-color:#F2C9C9; background:#FFF6F6; }
+  .btn-danger:hover{ background:var(--danger); border-color:var(--danger); color:#fff; }
+  .btn-icon{ padding:8px; width:34px; height:34px; justify-content:center; font-size:14px; }
+  .btn-sm{ font-size:12px; padding:7px 10px; }
+
+  /* ---------- header ---------- */
+  .head{ text-align:center; margin-bottom:30px; }
+  .eyebrow{ display:inline-flex; align-items:center; gap:9px; font-family:var(--mono);
+    font-size:11.5px; font-weight:500; letter-spacing:.2em; color:var(--muted); text-transform:uppercase; }
+  .live-dot{ width:8px; height:8px; border-radius:50%; background:var(--live);
+    box-shadow:0 0 0 0 rgba(255,77,77,.5); animation:pulse 2.2s ease-out infinite; }
+  .wordmark{ margin:16px 0 0; font-weight:800; font-size:clamp(2rem,7.6vw,2.85rem);
+    line-height:1.12; letter-spacing:-.01em; color:var(--ink); }
+  .wordmark span{ display:block; }
+  .bar{ width:46px; height:3px; border-radius:2px; background:var(--accent); margin:18px auto 0; }
+  .sub{ margin:16px auto 0; max-width:33ch; font-size:14.5px; line-height:1.62; color:var(--muted); }
+
+  /* ---------- link list ---------- */
+  .list{ display:flex; flex-direction:column; gap:12px; }
+  .channel{ position:relative; display:flex; align-items:center; gap:14px; padding:16px 18px;
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    text-decoration:none; color:inherit; box-shadow:var(--shadow-sm);
+    transition:transform .22s cubic-bezier(.2,.7,.2,1), box-shadow .22s ease, border-color .22s ease; }
+  .channel::before{ content:""; position:absolute; left:0; top:14px; bottom:14px; width:3px;
+    border-radius:0 3px 3px 0; background:var(--accent); transform:scaleY(0); transform-origin:center;
+    opacity:0; transition:transform .24s ease, opacity .24s ease; }
+  a.channel:hover{ transform:translateY(-2px); border-color:var(--line-strong); box-shadow:var(--shadow-lift); }
+  a.channel:focus-visible{ transform:translateY(-2px); border-color:var(--accent); box-shadow:var(--shadow-lift); outline:2px solid var(--accent); outline-offset:2px; }
+  a.channel:hover::before, a.channel:focus-visible::before{ transform:scaleY(1); opacity:1; }
+  .ch-body{ display:flex; flex-direction:column; gap:5px; min-width:0; flex:1; }
+  .ch-tag{ align-self:flex-start; font-family:var(--mono); font-size:10.5px; font-weight:500;
+    letter-spacing:.12em; color:var(--accent-ink); background:var(--accent-soft); padding:3px 7px; border-radius:6px; }
+  .ch-title{ font-size:16.5px; font-weight:700; color:var(--ink); letter-spacing:-.004em; word-break:break-word; }
+  .ch-desc{ font-size:13px; font-weight:400; line-height:1.5; color:var(--muted); word-break:break-word; }
+  .ch-arrow{ flex:none; font-family:var(--mono); font-size:18px; color:var(--faint); line-height:1;
+    transition:transform .24s cubic-bezier(.2,.7,.2,1), color .22s ease; }
+  a.channel:hover .ch-arrow, a.channel:focus-visible .ch-arrow{ color:var(--accent); transform:translateX(4px); }
+
+  /* editing card variant */
+  .channel.editing{ cursor:default; border-style:dashed; border-color:var(--line-strong); }
+  .card-tools{ display:flex; align-items:center; gap:6px; flex:none; }
+  .reorder{ display:flex; flex-direction:column; gap:3px; }
+  .reorder .btn-icon{ width:26px; height:20px; padding:0; font-size:11px; border-radius:7px; }
+  .reorder .btn-icon:disabled{ opacity:.35; cursor:default; border-color:var(--line); color:var(--faint); }
+
+  /* entrance */
+  @keyframes pulse{ 0%{box-shadow:0 0 0 0 rgba(255,77,77,.45)} 70%{box-shadow:0 0 0 7px rgba(255,77,77,0)} 100%{box-shadow:0 0 0 0 rgba(255,77,77,0)} }
+  @keyframes rise{ to{ opacity:1; transform:none; } }
+  .head{ opacity:0; transform:translateY(10px); animation:rise .55s cubic-bezier(.2,.7,.2,1) .02s forwards; }
+  .reveal{ opacity:0; transform:translateY(10px); animation:rise .5s cubic-bezier(.2,.7,.2,1) forwards; }
+
+  /* footer */
+  .foot{ margin-top:34px; text-align:center; font-size:12px; line-height:1.9; color:var(--faint); }
+  .foot .mk{ font-family:var(--mono); letter-spacing:.16em; color:var(--muted); }
+  .admin-link{ appearance:none; border:0; background:none; margin-top:6px; padding:4px 8px;
+    font-family:var(--sans); font-size:11.5px; color:var(--faint); cursor:pointer; border-radius:8px; letter-spacing:.02em; }
+  .admin-link:hover{ color:var(--accent-ink); background:var(--accent-soft); }
+  body[data-mode="edit"] .admin-link{ visibility:hidden; }
+
+  /* empty state */
+  .empty{ text-align:center; padding:34px 20px; border:1px dashed var(--line-strong);
+    border-radius:var(--radius); color:var(--muted); font-size:14px; background:rgba(255,255,255,.5); }
+
+  /* ---------- modal ---------- */
+  .overlay{ position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center;
+    padding:20px; background:rgba(18,20,28,.42); backdrop-filter:blur(3px); }
+  .overlay[hidden]{ display:none; }
+  .modal{ width:100%; max-width:440px; background:var(--surface); border-radius:18px;
+    box-shadow:var(--shadow-pop); padding:22px 22px 20px; animation:pop .18s ease; }
+  @keyframes pop{ from{ opacity:0; transform:translateY(8px) scale(.98); } to{ opacity:1; transform:none; } }
+  .modal h2{ margin:0 0 4px; font-size:18px; font-weight:800; letter-spacing:-.01em; }
+  .modal .m-sub{ margin:0 0 16px; font-size:12.5px; color:var(--muted); line-height:1.5; }
+  .field{ margin-bottom:13px; }
+  .field label{ display:block; font-size:12px; font-weight:600; color:var(--ink); margin-bottom:6px; }
+  .field .opt{ color:var(--faint); font-weight:400; }
+  .field input, .field textarea{ width:100%; font-family:var(--sans); font-size:14px; color:var(--ink);
+    padding:10px 12px; border:1px solid var(--line-strong); border-radius:10px; background:#FBFCFE; resize:vertical; }
+  .field textarea{ min-height:64px; line-height:1.5; }
+  .field input:focus, .field textarea:focus{ outline:none; border-color:var(--accent); background:#fff; box-shadow:0 0 0 3px var(--accent-soft); }
+  .field input[data-mono]{ font-family:var(--mono); font-size:13px; letter-spacing:.04em; }
+  .field .hint{ margin-top:5px; font-size:11px; color:var(--faint); }
+  .field.invalid input, .field.invalid textarea{ border-color:var(--danger); background:#FFF6F6; }
+  .field .err{ display:none; margin-top:5px; font-size:11px; color:var(--danger); }
+  .field.invalid .err{ display:block; }
+  .m-actions{ display:flex; gap:9px; justify-content:flex-end; margin-top:18px; }
+  .m-actions .grow{ margin-right:auto; }
+
+  /* toast */
+  .toast{ position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(12px);
+    z-index:80; padding:11px 16px; border-radius:12px; font-size:13px; font-weight:600; color:#fff;
+    background:#1B2030; box-shadow:var(--shadow-pop); opacity:0; pointer-events:none;
+    transition:opacity .2s ease, transform .2s ease; max-width:calc(100vw - 40px); }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .toast.ok{ background:#12331F; }
+  .toast.err{ background:#3A1414; }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation:none !important; transition:none !important; }
+    .head,.reveal{ opacity:1; transform:none; }
+  }
+  @media (max-width:480px){
+    .wrap{ padding:42px 16px 52px; }
+    .banner{ margin:-42px -16px 20px; }
+    .channel{ padding:15px 16px; }
+    .channel.editing{ flex-wrap:wrap; }
+    .channel.editing .card-tools{ width:100%; justify-content:flex-end; padding-top:4px; border-top:1px dashed var(--line); }
+  }
+</style>
+</head>
+<body data-mode="view">
+<main class="wrap">
+
+  <div class="banner" id="banner" hidden></div>
+
+  <!-- edit toolbar (편집 모드에서만 표시) -->
+  <div class="topbar" id="topbar">
+    <span class="tb-title">편집 모드</span>
+    <button class="btn btn-primary btn-sm" id="btnAdd">＋ 링크 추가</button>
+    <button class="btn btn-sm" id="btnHeader">헤더 수정</button>
+    <span class="synced" id="synced"><span class="dot"></span><span id="syncedText">공유 저장</span></span>
+    <span class="savestate" id="saveState">저장됨</span>
+    <span class="tb-spacer"></span>
+    <button class="btn btn-primary btn-sm" id="btnSave">저장</button>
+    <button class="btn btn-sm" id="btnDone">완료</button>
+  </div>
+
+  <header class="head">
+    <span class="eyebrow"><span class="live-dot"></span>Official Link Hub</span>
+    <h1 class="wordmark" id="wordmark"><span>퍼블리싱팀</span><span>링크 트리</span></h1>
+    <div class="bar"></div>
+    <p class="sub" id="subtitle">게임 공지사항과 공식 채널을 이곳에서 한 번에 확인하세요.</p>
+  </header>
+
+  <nav class="list" id="list" aria-label="퍼블리싱팀 공식 링크">
+    <div class="empty">불러오는 중…</div>
+  </nav>
+
+  <footer class="foot">
+    <span class="mk">OFFICIAL CHANNELS</span><br>
+    © 퍼블리싱팀 · 공식 링크 안내
+    <br><button class="admin-link" id="adminBtn">· 관리자 편집</button>
+  </footer>
+
+</main>
+
+<div class="overlay" id="overlay" hidden></div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+/* =============================================================
+   설정 (필요 시 여기만 수정)
+   - EDIT_PASSCODE : 편집 모드 진입 비밀번호.
+     ※ 코드에 그대로 들어있어 소스를 보면 알 수 있는 "가벼운 잠금"입니다.
+       공개 페이지에서 아무나 수정하는 것을 막는 최소한의 장치일 뿐,
+       강력한 보안이 아니라는 점을 감안하세요.
+   ============================================================= */
+const EDIT_PASSCODE = "1234";                 // Apps Script와 동일하게!
+const API_URL = "https://script.google.com/macros/s/AKfycbzUz8apkxYrzb13o0JdKtNWivQxk0nCSyhopxsy0o1Qv0EcwsWwjtB1SWBZ7BYggi3wog/exec";     // .../exec
+const STORAGE_KEY   = "publishing-linktree:v1";
+
+
+/* 처음 저장된 내용이 없을 때 보여줄 기본 링크 */
+const DEFAULTS = {
+  title: "퍼블리싱팀",
+  title2: "링크 트리",
+  subtitle: "게임 공지사항과 공식 채널을 이곳에서 한 번에 확인하세요.",
+  links: [
+    { id:"l1", tag:"NOTICE",    title:"공지사항",     desc:"서비스 점검·업데이트 등 주요 소식을 안내합니다.", url:"" },
+    { id:"l2", tag:"PATCH",     title:"패치노트",     desc:"최신 버전의 변경사항과 밸런스 조정 내역.",       url:"" },
+    { id:"l3", tag:"DISCORD",   title:"공식 디스코드", desc:"실시간 소통과 커뮤니티 이벤트에 참여하세요.",     url:"" },
+    { id:"l4", tag:"COMMUNITY", title:"공식 커뮤니티", desc:"공략과 피드백을 나누는 유저 게시판.",           url:"" },
+    { id:"l5", tag:"EVENT",     title:"진행 이벤트",   desc:"현재 진행 중인 이벤트와 보상을 확인하세요.",     url:"" },
+    { id:"l6", tag:"SUPPORT",   title:"고객지원",     desc:"문의 접수·신고 및 자주 묻는 질문(FAQ).",        url:"" },
+    { id:"l7", tag:"DOWNLOAD",  title:"게임 다운로드", desc:"공식 스토어에서 클라이언트를 내려받으세요.",     url:"" }
+  ]
+};
+
+/* ---------- 상태 ---------- */
+let data = null, mode = "view", unlocked = false, dirty = false, usingShared = false;
+
+/* ---------- DOM ---------- */
+const $ = (id)=>document.getElementById(id);
+const listEl=$("list"), overlay=$("overlay"), toastEl=$("toast");
+
+/* ---------- 저장소 래퍼 (Google Sheets via Apps Script) ---------- */
+function hasShared(){ return !!API_URL && !/여기에/.test(API_URL); }
+
+async function storeGet(){
+  if(!hasShared()) return null;
+  try{
+    const res = await fetch(API_URL, { method:"GET" });
+    if(!res.ok) return null;
+    const obj = await res.json();
+    return { value: JSON.stringify(obj) };
+  }catch(e){ return null; }
+}
+
+async function storeSet(_key, value){
+  if(!hasShared()) return null;
+  try{
+    const res = await fetch(API_URL, {
+      method:"POST",
+      headers:{ "Content-Type":"text/plain;charset=utf-8" }, // CORS preflight 회피
+      body: JSON.stringify({ passcode: EDIT_PASSCODE, data: JSON.parse(value) })
+    });
+    const obj = await res.json();
+    if(obj && obj.ok) return { value };
+    return null;
+  }catch(e){ return null; }
+}
+
+}
+
+/* ---------- 유틸 ---------- */
+const clone = (o)=>JSON.parse(JSON.stringify(o));
+const uid   = ()=>"l"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+function esc(s){ return (s??"").toString(); }
+function normalizeUrl(u){
+  u=(u||"").trim(); if(!u) return "";
+  if(/^javascript:/i.test(u)) return "";
+  if(/^(https?:\/\/|\/|#|mailto:|tel:)/i.test(u)) return u;
+  return "https://"+u;
+}
+function normalize(d){
+  if(!d || typeof d!=="object") return clone(DEFAULTS);
+  d.title=esc(d.title||DEFAULTS.title);
+  d.title2=esc(d.title2||"");
+  d.subtitle=esc(d.subtitle??DEFAULTS.subtitle);
+  d.links=Array.isArray(d.links)?d.links:[];
+  d.links=d.links.map(l=>({
+    id:l.id||uid(), tag:esc(l.tag||""), title:esc(l.title||""),
+    desc:esc(l.desc||""), url:esc(l.url||"")
+  }));
+  return d;
+}
+
+/* ---------- 렌더 ---------- */
+function renderHeader(){
+  const wm=$("wordmark");
+  wm.innerHTML="";
+  const s1=document.createElement("span"); s1.textContent=data.title||""; wm.appendChild(s1);
+  if((data.title2||"").trim()){ const s2=document.createElement("span"); s2.textContent=data.title2; wm.appendChild(s2); }
+  $("subtitle").textContent=data.subtitle||"";
+  $("subtitle").style.display=(data.subtitle||"").trim()?"":"none";
+}
+
+function makeArrow(){ const a=document.createElement("span"); a.className="ch-arrow"; a.setAttribute("aria-hidden","true"); a.textContent="→"; return a; }
+function makeBody(link){
+  const body=document.createElement("span"); body.className="ch-body";
+  if((link.tag||"").trim()){ const t=document.createElement("span"); t.className="ch-tag"; t.textContent=link.tag; body.appendChild(t); }
+  const ti=document.createElement("span"); ti.className="ch-title"; ti.textContent=link.title||"(제목 없음)"; body.appendChild(ti);
+  if((link.desc||"").trim()){ const d=document.createElement("span"); d.className="ch-desc"; d.textContent=link.desc; body.appendChild(d); }
+  return body;
+}
+
+function renderList(){
+  listEl.innerHTML="";
+  if(!data.links.length){
+    const e=document.createElement("div"); e.className="empty";
+    e.textContent = mode==="edit" ? "등록된 링크가 없습니다. ‘＋ 링크 추가’로 만들어 보세요." : "등록된 링크가 없습니다.";
+    listEl.appendChild(e); return;
+  }
+  data.links.forEach((link, i)=>{
+    if(mode==="view"){
+      const a=document.createElement("a"); a.className="channel reveal";
+      a.href=normalizeUrl(link.url)||"#";
+      if(a.getAttribute("href")!=="#"){ a.target="_blank"; a.rel="noopener noreferrer"; }
+      a.style.animationDelay=(0.06*i+0.08)+"s";
+      a.appendChild(makeBody(link)); a.appendChild(makeArrow());
+      listEl.appendChild(a);
+    } else {
+      const c=document.createElement("div"); c.className="channel editing";
+      c.appendChild(makeBody(link));
+      const tools=document.createElement("div"); tools.className="card-tools";
+      const re=document.createElement("div"); re.className="reorder";
+      const up=iconBtn("↑","위로"); up.disabled=(i===0); up.onclick=()=>move(i,-1);
+      const dn=iconBtn("↓","아래로"); dn.disabled=(i===data.links.length-1); dn.onclick=()=>move(i,1);
+      re.appendChild(up); re.appendChild(dn);
+      const edit=document.createElement("button"); edit.className="btn btn-sm"; edit.textContent="수정"; edit.onclick=()=>openLinkModal(i);
+      const del=document.createElement("button"); del.className="btn btn-sm btn-danger"; del.textContent="삭제"; del.onclick=()=>removeLink(i);
+      tools.appendChild(re); tools.appendChild(edit); tools.appendChild(del);
+      c.appendChild(tools);
+      listEl.appendChild(c);
+    }
+  });
+}
+function iconBtn(txt,label){ const b=document.createElement("button"); b.className="btn btn-icon"; b.textContent=txt; b.setAttribute("aria-label",label); return b; }
+
+function renderChrome(){
+  document.body.dataset.mode=mode;
+  const sy=$("synced"); sy.classList.toggle("off",!usingShared);
+  $("syncedText").textContent=usingShared?"공유 저장 활성":"임시 저장(로컬)";
+  const ss=$("saveState"); ss.textContent=dirty?"저장 안 됨":"저장됨"; ss.classList.toggle("dirty",dirty);
+  $("btnSave").disabled=!dirty;
+}
+function renderAll(){ renderHeader(); renderList(); renderChrome(); }
+
+/* ---------- 편집 동작 ---------- */
+function markDirty(){ dirty=true; renderChrome(); }
+function move(i,dir){ const j=i+dir; if(j<0||j>=data.links.length) return; const a=data.links; [a[i],a[j]]=[a[j],a[i]]; markDirty(); renderList(); }
+function removeLink(i){
+  const name=data.links[i]?.title||"이 링크";
+  confirmModal(`‘${name}’ 링크를 삭제할까요?`, "삭제", ()=>{ data.links.splice(i,1); markDirty(); renderList(); toast("삭제했습니다. 저장을 눌러 반영하세요."); });
+}
+
+/* ---------- 저장 ---------- */
+async function commit(){
+  $("btnSave").disabled=true;
+  const ok=await storeSet(STORAGE_KEY, JSON.stringify(data));
+  if(ok){ dirty=false; renderChrome(); toast(usingShared?"모두에게 저장되었습니다":"임시 저장되었습니다 (공유 비활성)","ok"); }
+  else { renderChrome(); toast("저장에 실패했습니다. 다시 시도해 주세요.","err"); }
+}
+
+/* ---------- 모달 엔진 ---------- */
+let escHandler=null;
+function closeModal(){ overlay.hidden=true; overlay.innerHTML=""; if(escHandler){ document.removeEventListener("keydown",escHandler); escHandler=null; } }
+function showModal({title, subtitle, fields=[], submitText="저장", onSubmit, extra}){
+  overlay.innerHTML="";
+  const modal=document.createElement("div"); modal.className="modal"; modal.setAttribute("role","dialog"); modal.setAttribute("aria-modal","true");
+  const h=document.createElement("h2"); h.textContent=title; modal.appendChild(h);
+  if(subtitle){ const p=document.createElement("p"); p.className="m-sub"; p.textContent=subtitle; modal.appendChild(p); }
+  const inputs={};
+  fields.forEach(f=>{
+    const wrap=document.createElement("div"); wrap.className="field"; wrap.dataset.key=f.key;
+    const lab=document.createElement("label"); lab.textContent=f.label;
+    if(!f.required){ const o=document.createElement("span"); o.className="opt"; o.textContent=" (선택)"; lab.appendChild(o); }
+    wrap.appendChild(lab);
+    const el=document.createElement(f.type==="textarea"?"textarea":"input");
+    if(f.type==="password") el.type="password";
+    if(f.mono) el.setAttribute("data-mono","1");
+    el.value=f.value||""; if(f.placeholder) el.placeholder=f.placeholder; el.setAttribute("data-key",f.key);
+    wrap.appendChild(el);
+    if(f.hint){ const hn=document.createElement("div"); hn.className="hint"; hn.textContent=f.hint; wrap.appendChild(hn); }
+    const er=document.createElement("div"); er.className="err"; er.textContent=f.errMsg||"필수 입력입니다."; wrap.appendChild(er);
+    modal.appendChild(wrap); inputs[f.key]=el;
+  });
+  const act=document.createElement("div"); act.className="m-actions";
+  if(extra){ act.appendChild(extra); }
+  const cancel=document.createElement("button"); cancel.className="btn"; cancel.textContent="취소"; cancel.onclick=closeModal;
+  const submit=document.createElement("button"); submit.className="btn btn-primary"; submit.textContent=submitText;
+  const doSubmit=()=>{
+    const vals={}; fields.forEach(f=>vals[f.key]=inputs[f.key].value);
+    let bad=false;
+    fields.forEach(f=>{ const w=modal.querySelector('.field[data-key="'+f.key+'"]');
+      if(f.required && !(vals[f.key]||"").trim()){ w.classList.add("invalid"); bad=true; } else { w.classList.remove("invalid"); } });
+    if(bad) return;
+    onSubmit(vals);
+  };
+  submit.onclick=doSubmit; act.appendChild(cancel); act.appendChild(submit); modal.appendChild(act);
+  overlay.appendChild(modal); overlay.hidden=false;
+  const first=modal.querySelector("input,textarea"); if(first) setTimeout(()=>first.focus(),30);
+  modal.querySelectorAll("input").forEach(inp=>inp.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); doSubmit(); } }));
+  escHandler=(e)=>{ if(e.key==="Escape") closeModal(); }; document.addEventListener("keydown",escHandler);
+  overlay.onclick=(e)=>{ if(e.target===overlay) closeModal(); };
+}
+
+function confirmModal(message, okText, onOk){
+  showModal({ title:"확인", subtitle:message, fields:[], submitText:okText, onSubmit:()=>{ closeModal(); onOk(); } });
+  // 확인 모달은 위험 동작이므로 기본 버튼을 danger 톤으로
+  const b=overlay.querySelector(".m-actions .btn-primary"); if(b){ b.classList.remove("btn-primary"); b.classList.add("btn-danger"); }
+}
+
+/* ---------- 링크 추가/수정 모달 ---------- */
+function openLinkModal(index){
+  const editing = index!=null;
+  const l = editing ? data.links[index] : { tag:"", title:"", desc:"", url:"" };
+  showModal({
+    title: editing?"링크 수정":"링크 추가",
+    fields:[
+      { key:"title", label:"제목", value:l.title, placeholder:"예: 공지사항", required:true },
+      { key:"desc",  label:"내용", value:l.desc, type:"textarea", placeholder:"카드에 표시할 한 줄 설명" },
+      { key:"url",   label:"링크", value:l.url, mono:true, placeholder:"https://example.com", hint:"http:// 를 생략하면 자동으로 붙습니다." },
+      { key:"tag",   label:"태그", value:l.tag, mono:true, placeholder:"예: NOTICE", hint:"카드 왼쪽 작은 라벨. 비워도 됩니다." }
+    ],
+    submitText: editing?"수정 완료":"추가",
+    onSubmit:(v)=>{
+      const item={ id: editing?l.id:uid(), tag:v.tag.trim(), title:v.title.trim(), desc:v.desc.trim(), url:normalizeUrl(v.url) };
+      if(editing) data.links[index]=item; else data.links.push(item);
+      closeModal(); markDirty(); renderList();
+      toast(editing?"수정했습니다. 저장을 눌러 반영하세요.":"추가했습니다. 저장을 눌러 반영하세요.");
+    }
+  });
+}
+
+/* ---------- 헤더 수정 모달 ---------- */
+function openHeaderModal(){
+  showModal({
+    title:"헤더 수정",
+    subtitle:"페이지 상단의 제목과 소개 문구를 바꿉니다.",
+    fields:[
+      { key:"title",  label:"제목 (1줄)", value:data.title, placeholder:"퍼블리싱팀", required:true },
+      { key:"title2", label:"제목 (2줄)", value:data.title2, placeholder:"링크 트리" },
+      { key:"subtitle", label:"소개 문구", value:data.subtitle, type:"textarea", placeholder:"한 줄 소개" }
+    ],
+    submitText:"적용",
+    onSubmit:(v)=>{
+      data.title=v.title.trim(); data.title2=v.title2.trim(); data.subtitle=v.subtitle.trim();
+      closeModal(); markDirty(); renderHeader(); toast("헤더를 수정했습니다. 저장을 눌러 반영하세요.");
+    }
+  });
+}
+
+/* ---------- 편집 모드 진입/종료 ---------- */
+function requestEdit(){
+  if(unlocked){ enterEdit(); return; }
+  showModal({
+    title:"관리자 편집",
+    subtitle:"편집하려면 비밀번호를 입력하세요.",
+    fields:[ { key:"code", label:"비밀번호", type:"password", required:true, errMsg:"비밀번호를 입력하세요." } ],
+    submitText:"확인",
+    onSubmit:(v)=>{
+      if(v.code===EDIT_PASSCODE){ unlocked=true; closeModal(); enterEdit(); }
+      else {
+        const w=overlay.querySelector('.field[data-key="code"]');
+        if(w){ w.classList.add("invalid"); w.querySelector(".err").textContent="비밀번호가 올바르지 않습니다."; }
+      }
+    }
+  });
+}
+function enterEdit(){ mode="edit"; renderAll(); window.scrollTo({top:0,behavior:"smooth"}); }
+function exitEdit(){
+  if(dirty){ confirmModal("저장하지 않은 변경사항이 있습니다. 그래도 나갈까요?","나가기",()=>{ closeModal(); mode="view"; dirty=false; loadFresh().then(()=>renderAll()); }); return; }
+  mode="view"; renderAll();
+}
+/* 편집 취소로 나갈 때 저장된 최신본으로 되돌림 */
+async function loadFresh(){
+  const r = await storeGet();
+  data = r && r.value ? normalize(JSON.parse(r.value)) : normalize(clone(DEFAULTS));
+}
+
+/* ---------- toast ---------- */
+let toastT=null;
+function toast(msg,kind){ toastEl.hidden=false; toastEl.textContent=msg; toastEl.className="toast "+(kind||""); requestAnimationFrame(()=>toastEl.classList.add("show"));
+  clearTimeout(toastT); toastT=setTimeout(()=>{ toastEl.classList.remove("show"); },2600); }
+
+/* ---------- 배너 (공유 저장 비활성 시) ---------- */
+function showBanner(){ const b=$("banner"); b.hidden=false;
+  b.innerHTML='<b>공유 저장이 비활성 상태입니다.</b> 지금 화면에서만 임시로 저장됩니다. 저장 내용을 모두에게 동일하게 보이게 하려면 Claude 아티팩트 링크로 공유하거나 별도 백엔드 연결이 필요합니다.'; }
+
+/* ---------- 초기화 ---------- */
+async function init(){
+  usingShared=hasShared();
+  if(!usingShared) showBanner();
+  await loadFresh();
+  renderAll();
+  if(location.hash==="#edit") requestEdit();
+}
+
+/* 버튼 배선 */
+$("adminBtn").onclick=requestEdit;
+$("btnAdd").onclick=()=>openLinkModal(null);
+$("btnHeader").onclick=openHeaderModal;
+$("btnSave").onclick=commit;
+$("btnDone").onclick=exitEdit;
+
+init();
+</script>
+</body>
+</html>
