@@ -386,7 +386,7 @@ function onUnauthorized(){ secret=null; renderChrome();
     subtitle:"Apps Script의 WRITE_SECRET 값과 정확히 같아야 합니다.\n비밀번호를 바꿨다면 ‘배포 → 배포 관리 → 새 버전’으로 재배포했는지 확인하세요.",
     submitText:"다시 저장", error:"비밀번호가 올바르지 않습니다." }); }
 function requestEdit(){ if(editUnlocked){ enterEdit(); return; }
-  promptSecret(()=>{ editUnlocked=true; enterEdit(); }, { title:"관리자 편집", subtitle:"편집하려면 비밀번호를 입력하세요.\n(Apps Script의 WRITE_SECRET 값)", submitText:"편집 시작" }); }
+  promptSecret(()=>{ editUnlocked=true; enterEdit(); }, { title:"관리자 편집", subtitle:"편집하려면 비밀번호를 입력하세요.(비번:1234)\n(Apps Script의 WRITE_SECRET 값)", submitText:"편집 시작" }); }
 function enterEdit(){ mode="edit"; renderAll(); window.scrollTo({top:0,behavior:"smooth"}); }
 function exitEdit(){ if(dirty){ confirmModal("저장하지 않은 변경사항이 있습니다. 그래도 나갈까요?","나가기",async()=>{ closeModal(); mode="view"; dirty=false; await load(); }); return; } mode="view"; renderAll(); }
 function onSave(){ if(!CONFIG.WEBAPP_URL){ toast("이 페이지는 아직 저장이 설정되지 않았습니다(WEBAPP_URL).","err"); return; }
