@@ -283,8 +283,6 @@ async function storeSet(_key, value){
   }catch(e){ return null; }
 }
 
-}
-
 /* ---------- 유틸 ---------- */
 const clone = (o)=>JSON.parse(JSON.stringify(o));
 const uid   = ()=>"l"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
