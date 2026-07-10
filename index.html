@@ -6,7 +6,11 @@
 <title>퍼블리싱팀 링크 트리</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="preconnect" href="https://script.google.com">
+<link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
+<link rel="preconnect" href="https://docs.google.com">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.css">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
   :root{
@@ -154,7 +158,7 @@
     <span class="eyebrow"><span class="live-dot"></span>Official Link Hub</span>
     <h1 class="wordmark" id="wordmark"><span>퍼블리싱팀</span><span>링크 트리</span></h1>
     <div class="bar"></div>
-    <p class="sub" id="subtitle">팀 공통관리를 위한 링크를 한 번에 확인하세요.</p>
+    <p class="sub" id="subtitle">게임 공지사항과 공식 채널을 이곳에서 한 번에 확인하세요.</p>
   </header>
 
   <nav class="list" id="list" aria-label="퍼블리싱팀 공식 링크">
@@ -193,7 +197,7 @@ const CONFIG = {
   CSV_URL:   "",      // 읽기 보조(웹에 게시한 CSV)
   TITLE:     "퍼블리싱팀",
   TITLE2:    "링크 트리",
-  SUBTITLE:  "팀 공통관리를 위한 링크를 한 번에 확인하세요."
+  SUBTITLE:  "게임 공지사항과 공식 채널을 이곳에서 한 번에 확인하세요."
 };
 
 const SAMPLE = [
@@ -227,16 +231,20 @@ async function readViaWebApp(){
   return null;
 }
 async function readViaSheet(){
-  if(CONFIG.CSV_URL){ try{ const r=await fetch(cb(CONFIG.CSV_URL),{cache:"no-store"}); if(r.ok) return rowsToLinks(parseCSV(await r.text())); }catch(e){} }
+  if(CONFIG.CSV_URL){ try{ const r=await fetch(cb(CONFIG.CSV_URL),{cache:"no-store"}); if(r.ok){ const t=await r.text(); if(t && t[0]!=="<") return rowsToLinks(parseCSV(t)); } }catch(e){} }
   if(CONFIG.SHEET_ID){
     try{ const u=`https://docs.google.com/spreadsheets/d/${CONFIG.SHEET_ID}/gviz/tq?tqx=out:json&headers=1&gid=${CONFIG.GID}`;
       const r=await fetch(cb(u),{cache:"no-store"}); if(r.ok){ const rows=parseGviz(await r.text()); if(rows) return rowsToLinks(rows); } }catch(e){}
     try{ const u=`https://docs.google.com/spreadsheets/d/${CONFIG.SHEET_ID}/export?format=csv&gid=${CONFIG.GID}`;
-      const r=await fetch(cb(u),{cache:"no-store"}); if(r.ok) return rowsToLinks(parseCSV(await r.text())); }catch(e){}
+      const r=await fetch(cb(u),{cache:"no-store"}); if(r.ok){ const t=await r.text(); if(t && t[0]!=="<") return rowsToLinks(parseCSV(t)); } }catch(e){}
   }
   return null;
 }
-async function readLinks(){ const a=await readViaWebApp(); if(a) return a; return await readViaSheet(); }
+// 웹앱과 시트를 동시에 요청 → 먼저 도착한 데이터를 사용 (배열이면 성공, 빈 배열도 성공으로 간주)
+function firstData(promises){ return new Promise(resolve=>{ let left=promises.length, done=false;
+  const settle=(v)=>{ if(done) return; if(Array.isArray(v)){ done=true; resolve(v); return; } if(--left<=0){ done=true; resolve(null); } };
+  promises.forEach(p=>Promise.resolve(p).then(settle).catch(()=>settle(null))); }); }
+async function readLinks(){ return await firstData([ readViaSheet(), readViaWebApp() ]); }
 
 function mapRow(l){ return { id:uid(), tag:esc(l.tag), title:esc(l.title)||"(제목 없음)", desc:esc(l.desc), url:esc(l.url) }; }
 function parseCSV(text){ text=(text||"").replace(/^\uFEFF/,""); const out=[]; let f="",row=[],q=false,i=0;
@@ -272,7 +280,7 @@ async function writeToSheet(){
     const r=await fetch(CONFIG.WEBAPP_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:payload});
     if(r.ok){ const j=await r.json().catch(()=>null);
       if(j){ setBusy(false);
-        if(j.ok){ dirty=false; renderChrome(); toast("저장되었습니다. 방문자에게 반영됩니다.","ok"); }
+        if(j.ok){ dirty=false; cacheSet(data.links); renderChrome(); toast("저장되었습니다. 방문자에게 반영됩니다.","ok"); }
         else if(j.error==="unauthorized"){ onUnauthorized(); }
         else { toast("저장 실패: "+(j.error||"알 수 없음"),"err"); }
         return; } }
@@ -283,9 +291,9 @@ async function writeToSheet(){
   await sleep(1400);
   const after=await readViaWebApp();
   setBusy(false);
-  if(after && sameLinks(after,data.links)){ dirty=false; renderChrome(); toast("저장되었습니다. 방문자에게 반영됩니다.","ok"); }
+  if(after && sameLinks(after,data.links)){ dirty=false; cacheSet(data.links); renderChrome(); toast("저장되었습니다. 방문자에게 반영됩니다.","ok"); }
   else if(after){ onUnauthorized(); }
-  else { dirty=false; renderChrome(); toast("저장 요청을 보냈습니다. 잠시 후 새로고침으로 확인하세요.","ok"); }
+  else { dirty=false; cacheSet(data.links); renderChrome(); toast("저장 요청을 보냈습니다. 잠시 후 새로고침으로 확인하세요.","ok"); }
 }
 
 /* ---------- 렌더 ---------- */
@@ -386,7 +394,7 @@ function onUnauthorized(){ secret=null; renderChrome();
     subtitle:"Apps Script의 WRITE_SECRET 값과 정확히 같아야 합니다.\n비밀번호를 바꿨다면 ‘배포 → 배포 관리 → 새 버전’으로 재배포했는지 확인하세요.",
     submitText:"다시 저장", error:"비밀번호가 올바르지 않습니다." }); }
 function requestEdit(){ if(editUnlocked){ enterEdit(); return; }
-  promptSecret(()=>{ editUnlocked=true; enterEdit(); }, { title:"관리자 편집", subtitle:"편집하려면 비밀번호를 입력하세요.(비번:1234)\n(Apps Script의 WRITE_SECRET 값)", submitText:"편집 시작" }); }
+  promptSecret(()=>{ editUnlocked=true; enterEdit(); }, { title:"관리자 편집", subtitle:"편집하려면 비밀번호를 입력하세요.\n(Apps Script의 WRITE_SECRET 값)", submitText:"편집 시작" }); }
 function enterEdit(){ mode="edit"; renderAll(); window.scrollTo({top:0,behavior:"smooth"}); }
 function exitEdit(){ if(dirty){ confirmModal("저장하지 않은 변경사항이 있습니다. 그래도 나갈까요?","나가기",async()=>{ closeModal(); mode="view"; dirty=false; await load(); }); return; } mode="view"; renderAll(); }
 function onSave(){ if(!CONFIG.WEBAPP_URL){ toast("이 페이지는 아직 저장이 설정되지 않았습니다(WEBAPP_URL).","err"); return; }
@@ -399,17 +407,37 @@ function toast(msg,kind){ toastEl.hidden=false; toastEl.textContent=msg; toastEl
 function banner(html,warn){ const b=$("banner"); b.hidden=false; b.classList.toggle("warn",!!warn); b.innerHTML=html; }
 function hideBanner(){ $("banner").hidden=true; }
 
+/* ---------- 캐시 (두 번째 방문부터 즉시 표시) ---------- */
+const CACHE_KEY="linktree_cache_v1";
+function cacheGet(){ try{ const s=localStorage.getItem(CACHE_KEY); return s?JSON.parse(s):null; }catch(e){ return null; } }
+function cacheSet(links){ try{ localStorage.setItem(CACHE_KEY, JSON.stringify((links||[]).map(l=>({tag:l.tag,title:l.title,desc:l.desc,url:l.url})))); }catch(e){} }
+function withIds(arr){ return (arr||[]).map(l=>({ id:uid(), tag:esc(l.tag), title:esc(l.title)||"(제목 없음)", desc:esc(l.desc), url:esc(l.url) })); }
+const RO_MSG='현재는 <b>읽기 전용</b>입니다. 페이지에서 편집·저장하려면 Apps Script 웹앱 URL을 <code>WEBAPP_URL</code>에 넣어주세요.';
+const WARN_MSG='아직 시트 데이터를 불러오지 못했습니다. 아래는 <b>예시</b>입니다. — Apps Script 웹앱 배포 후 <code>WEBAPP_URL</code> 설정, 또는 시트를 웹에 게시(CSV)하세요.';
+
 /* ---------- 로드 ---------- */
 async function load(){
-  showLoading();
-  const links=await readLinks();
-  if(links){ data={links}; 
-    if(!CONFIG.WEBAPP_URL) banner('현재는 <b>읽기 전용</b>입니다. 페이지에서 편집·저장하려면 Apps Script 웹앱 URL을 <code>WEBAPP_URL</code>에 넣어주세요.');
-    else hideBanner();
+  const cached=cacheGet();
+  if(cached){                       // 캐시가 있으면 즉시 표시 → 뒤에서 조용히 갱신
+    data={links: withIds(cached)};
+    if(CONFIG.WEBAPP_URL) hideBanner(); else banner(RO_MSG);
     renderAll();
-  }else{
-    data={links: rowsToLinks(SAMPLE.map(s=>({tag:s.tag,title:s.title,desc:s.desc,url:s.url,enabled:"TRUE"})))};
-    banner('아직 시트 데이터를 불러오지 못했습니다. 아래는 <b>예시</b>입니다. — Apps Script 웹앱 배포 후 <code>WEBAPP_URL</code> 설정, 또는 시트를 웹에 게시(CSV)하세요.',true);
+    refresh(true);
+  } else {                          // 첫 방문: 스피너 후 로드
+    showLoading();
+    await refresh(false);
+  }
+}
+async function refresh(silent){
+  const links=await readLinks();
+  if(mode==="edit"){ if(links) cacheSet(links); return; }   // 편집 중이면 화면을 건드리지 않음
+  if(links){
+    cacheSet(links);
+    if(CONFIG.WEBAPP_URL) hideBanner(); else banner(RO_MSG);
+    if(!sameLinks(links, data.links||[])){ data={links}; renderAll(); }
+  } else if(!silent){
+    data={links: withIds(SAMPLE)};
+    banner(WARN_MSG,true);
     renderAll();
   }
 }
